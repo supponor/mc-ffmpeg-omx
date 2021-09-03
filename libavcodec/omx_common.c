@@ -365,6 +365,15 @@ av_cold int omx_cmpnt_init(OMXComponentContext *s)
 
     av_log(s->avctx, AV_LOG_TRACE, "OMX component init\n");
 
+    pthread_mutex_init(&s->state_mutex, NULL);
+    pthread_cond_init(&s->state_cond, NULL);
+    for (int i = 0; i < MAX_PORT_NUMBER; ++i) {
+        pthread_mutex_init(&s->buffers_mutex[i], NULL);
+    }
+    pthread_mutex_init(&s->buffers_cond_mutex, NULL);
+    pthread_cond_init(&s->buffers_cond, NULL);
+    pthread_mutex_init(&s->deiniting_mutex, NULL);
+
     pthread_mutex_lock(&s->deiniting_mutex);
     s->deiniting = OMX_FALSE;
     pthread_mutex_unlock(&s->deiniting_mutex);
@@ -454,6 +463,15 @@ av_cold int omx_cmpnt_end(OMXComponentContext *s)
     s->core.OMX_Deinit();
 
     av_frame_free(&s->frame);
+
+    pthread_mutex_destroy(&s->deiniting_mutex);
+    pthread_cond_destroy(&s->buffers_cond);
+    pthread_mutex_destroy(&s->buffers_cond_mutex);
+    for (int i = 0; i < MAX_PORT_NUMBER; ++i) {
+        pthread_mutex_destroy(&s->buffers_mutex[i]);
+    }
+    pthread_cond_destroy(&s->buffers_cond);
+    pthread_mutex_destroy(&s->state_mutex);
 
     return ret;
 }
