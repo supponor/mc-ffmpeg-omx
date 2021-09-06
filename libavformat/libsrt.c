@@ -155,10 +155,27 @@ static const AVOption libsrt_options[] = {
     { NULL }
 };
 
+static int libsrt_neterrno(URLContext *h)
+{
+    int err = srt_getlasterror(NULL);
+    av_log(h, AV_LOG_ERROR, "%s\n", srt_getlasterror_str());
+    if (err == SRT_EASYNCRCV)
+        return AVERROR(EAGAIN);
+    return AVERROR_UNKNOWN;
+}
+
+static int libsrt_socket_nonblock(int socket, int enable)
+{
+    int ret = srt_setsockopt(socket, 0, SRTO_SNDSYN, &enable, sizeof(enable));
+    if (ret < 0)
+        return ret;
+    return srt_setsockopt(socket, 0, SRTO_RCVSYN, &enable, sizeof(enable));
+}
+
 #if HAVE_PTHREAD_CANCEL
 
 /* More precise time measurement in Windows, call default routine otherwise */
-int64_t av_gettime_relative_precise(void)
+static int64_t av_gettime_relative_precise(void)
 {
 #ifdef _WIN32
     static LARGE_INTEGER freq;
@@ -288,23 +305,6 @@ end:
 }
 
 #endif
-
-static int libsrt_neterrno(URLContext *h)
-{
-    int err = srt_getlasterror(NULL);
-    av_log(h, AV_LOG_ERROR, "%s\n", srt_getlasterror_str());
-    if (err == SRT_EASYNCRCV)
-        return AVERROR(EAGAIN);
-    return AVERROR_UNKNOWN;
-}
-
-static int libsrt_socket_nonblock(int socket, int enable)
-{
-    int ret = srt_setsockopt(socket, 0, SRTO_SNDSYN, &enable, sizeof(enable));
-    if (ret < 0)
-        return ret;
-    return srt_setsockopt(socket, 0, SRTO_RCVSYN, &enable, sizeof(enable));
-}
 
 static int libsrt_network_wait_fd(URLContext *h, int eid, int fd, int write)
 {
