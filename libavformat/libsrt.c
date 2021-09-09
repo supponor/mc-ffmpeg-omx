@@ -36,8 +36,13 @@
 #include "os_support.h"
 #include "url.h"
 
+#if HAVE_W32THREADS
+#undef HAVE_PTHREAD_CANCEL
+#define HAVE_PTHREAD_CANCEL 1
+#endif
+
 #if HAVE_PTHREAD_CANCEL
-#include <pthread.h>
+#include "libavutil/thread.h"
 #endif
 
 /* This is for MPEG-TS and it's a default SRTO_PAYLOADSIZE for SRTT_LIVE (8 TS packets) */
@@ -224,19 +229,17 @@ static void *circular_buffer_task_tx(void *_URLContext)
         uint8_t tmp[4];
         int64_t timestamp;
 
-        len=av_fifo_size(s->fifo);
+        len = av_fifo_size(s->fifo);
 
         while (len<4) {
             if (s->close_req)
                 goto end;
-            if (pthread_cond_wait(&s->cond, &s->mutex) < 0) {
-                goto end;
-            }
-            len=av_fifo_size(s->fifo);
+            pthread_cond_wait(&s->cond, &s->mutex);
+            len = av_fifo_size(s->fifo);
         }
 
         av_fifo_generic_read(s->fifo, tmp, 4, NULL);
-        len=AV_RL32(tmp);
+        len = AV_RL32(tmp);
 
         av_assert0(len >= 0);
         av_assert0(len <= sizeof(s->tmp));
@@ -625,23 +628,28 @@ static int libsrt_setup(URLContext *h, const char *uri, int flags)
     }
 
     if (is_output && s->bitrate && s->circular_buffer_size) {
-        int ret;
-
         /* start the task going */
         s->fifo = av_fifo_alloc(s->circular_buffer_size);
+        if (!s->fifo) {
+            ret = AVERROR(ENOMEM);
+            goto fail;
+        }
         ret = pthread_mutex_init(&s->mutex, NULL);
         if (ret != 0) {
             av_log(h, AV_LOG_ERROR, "pthread_mutex_init failed : %s\n", strerror(ret));
+            ret = AVERROR(ret);
             goto fail;
         }
         ret = pthread_cond_init(&s->cond, NULL);
         if (ret != 0) {
             av_log(h, AV_LOG_ERROR, "pthread_cond_init failed : %s\n", strerror(ret));
+            ret = AVERROR(ret);
             goto cond_fail;
         }
         ret = pthread_create(&s->circular_buffer_thread, NULL, circular_buffer_task_tx, h);
         if (ret != 0) {
             av_log(h, AV_LOG_ERROR, "pthread_create failed : %s\n", strerror(ret));
+            ret = AVERROR(ret);
             goto thread_fail;
         }
         s->thread_started = 1;
@@ -837,8 +845,8 @@ static int libsrt_write(URLContext *h, const uint8_t *buf, int size)
           Return error if last tx failed.
           Here we can't know on which packet error was, but it needs to know that error exists.
         */
-        if (s->circular_buffer_error<0) {
-            int err=s->circular_buffer_error;
+        if (s->circular_buffer_error < 0) {
+            int err = s->circular_buffer_error;
             pthread_mutex_unlock(&s->mutex);
             return err;
         }
@@ -876,6 +884,24 @@ static int libsrt_close(URLContext *h)
     SRTContext *s = h->priv_data;
 
     srt_close(s->fd);
+
+#if HAVE_PTHREAD_CANCEL
+    // Request close once writing is finished
+    if (s->thread_started) {
+        int ret;
+
+        pthread_mutex_lock(&s->mutex);
+        s->close_req = 1;
+        pthread_cond_signal(&s->cond);
+        pthread_mutex_unlock(&s->mutex);
+
+        ret = pthread_join(s->circular_buffer_thread, NULL);
+        if (ret != 0)
+            av_log(h, AV_LOG_ERROR, "pthread_join(): %s\n", strerror(ret));
+        pthread_mutex_destroy(&s->mutex);
+        pthread_cond_destroy(&s->cond);
+    }
+#endif
 
     srt_epoll_release(s->eid);
 
