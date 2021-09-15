@@ -210,6 +210,11 @@ typedef struct AVCodecParameters {
      * Audio only. The channel layout and number of channels.
      */
     AVChannelLayout ch_layout;
+    /**
+     * Audio only. xHEAACEnc/FF_PROFILE_AAC_XHE only.
+     */
+    int roll_distance;
+    int64_t rap_interval;
 } AVCodecParameters;
 
 /**
