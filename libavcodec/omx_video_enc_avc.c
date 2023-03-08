@@ -23,6 +23,7 @@
 
 #include "omx_video_enc_avc.h"
 #include "profiles.h"
+#include "codec_internal.h"
 
 static av_cold int omx_cmpnt_encoder_init(AVCodecContext *avctx)
 {
@@ -78,7 +79,7 @@ const AVOption avc_enc_omx_options[] = {
         { NULL }
 };
 
-static const AVCodecDefault avc_enc_omx_defaults[] = {
+static const FFCodecDefault avc_enc_omx_defaults[] = {
         { "b",                "0" }, // bitrate
         { "bf",               "-1" }, // B-frames between non-B-frames
         { "g",                "-1" }, // the group of picture (GOP) size
@@ -93,18 +94,18 @@ static const AVClass omx_avc_encoder_class = {
         .version    = LIBAVUTIL_VERSION_INT,
 };
 
-AVCodec ff_avc_omx_encoder = {
-        .name             = "omx_enc_avc",
-        .long_name        = NULL_IF_CONFIG_SMALL("OMX IL AVC Encoder"),
-        .type             = AVMEDIA_TYPE_VIDEO,
-        .id               = AV_CODEC_ID_H264,
+FFCodec ff_avc_omx_encoder = {
+        .p.name             = "omx_enc_avc",
+        .p.long_name        = NULL_IF_CONFIG_SMALL("OMX IL AVC Encoder"),
+        .p.type             = AVMEDIA_TYPE_VIDEO,
+        .p.id               = AV_CODEC_ID_H264,
         .priv_data_size   = sizeof(OMXAVCEncComponentContext),
         .init             = omx_cmpnt_encoder_init,
         .close            = omx_cmpnt_codec_end,
-        .receive_packet   = omx_receive_packet,
-        .capabilities     = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_DR1,
-        .profiles         = NULL_IF_CONFIG_SMALL(ff_h264_profiles),
+        .cb.receive_packet  = omx_receive_packet,
+        .p.capabilities     = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_DR1,
+        .p.profiles         = NULL_IF_CONFIG_SMALL(ff_h264_profiles),
         .defaults         = avc_enc_omx_defaults,
-        .priv_class       = &omx_avc_encoder_class,
-        .pix_fmts         = (const enum AVPixelFormat[]) { AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV420P10LE, AV_PIX_FMT_YUV422P10LE, AV_PIX_FMT_NONE }
+        .p.priv_class       = &omx_avc_encoder_class,
+        .p.pix_fmts         = (const enum AVPixelFormat[]) { AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV420P10LE, AV_PIX_FMT_YUV422P10LE, AV_PIX_FMT_NONE }
 };

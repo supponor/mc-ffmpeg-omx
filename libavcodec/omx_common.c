@@ -453,7 +453,7 @@ av_cold int omx_cmpnt_end(OMXComponentContext *s)
 
     s->core.OMX_Deinit();
 
-    av_frame_free(s->frame);
+    av_frame_free(&s->frame);
 
     return ret;
 }
